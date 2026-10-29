@@ -74,7 +74,7 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 <button class="b" data-a="front">To front</button><button class="b" data-a="back">To back</button><span class="sp"></span>
 <button class="b" data-a="io">Export / import</button>
 <button class="b" data-a="all">Present from start</button><button class="b go" data-a="present">Present</button>
-<input type="file" id="file" accept="image/*" hidden><input type="file" id="file2" hidden>
+<input type="file" id="file" accept="image/*" hidden><input type="file" id="file2" hidden><input type="file" id="deckfile" accept=".scdeck,.json,application/json" hidden>
 </div>
 <div id="main">
 <aside id="th"><div class="tf">
@@ -87,7 +87,7 @@ dialog::backdrop{background:rgba(0,0,0,.5)}
 <dialog id="io"><h3 style="margin-top:0;font-family:Georgia,serif">Export / import</h3>
 <p class="hint" style="margin-top:0">Copy this text to back up your deck, or paste a saved deck and load it.</p>
 <textarea id="iot" spellcheck="false"></textarea>
-<div class="row" style="margin:10px 0 0"><button class="b" id="icp">Copy</button><button class="b go" id="ild">Load deck</button><button class="b" id="icl">Close</button></div></dialog>
+<div class="row" style="margin:10px 0 0;flex-wrap:wrap"><button class="b go" id="idown">Download .scdeck</button><button class="b" id="iimport">Import .scdeck</button><button class="b" id="icp">Copy JSON</button><button class="b" id="ild">Load pasted deck</button><button class="b" id="icl">Close</button></div></dialog>
 <div id="pres" hidden></div>
 <script>
 const W=960,H=540,$=s=>document.querySelector(s),uid=()=>Math.random().toString(36).slice(2,9);
@@ -236,9 +236,39 @@ $('#file').onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new Fil
 r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,1000/im.width),c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;
 c.getContext('2d').drawImage(im,0,0,c.width,c.height);const w=Math.min(420,c.width);
 add('image',{src:c.toDataURL(f.type==='image/png'?'image/png':'image/jpeg',.85),w,h:Math.round(w*c.height/c.width),x:270,y:130,rad:0})};im.src=r.result};r.readAsDataURL(f);ev.target.value=''};
+function deckFilename(){
+ const base=String(S.title||'slidecraft').trim().replace(/[<>:"/\\|?*\x00-\x1f]/g,'-').replace(/\s+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,80);
+ return (base||'slidecraft')+'.scdeck'
+}
+function downloadDeck(){
+ const data=JSON.stringify(S,null,2);
+ const blob=new Blob([data],{type:'application/x-slidecraft+json'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download=deckFilename();document.body.append(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+ toast('Slide deck downloaded as '+deckFilename());
+}
+function loadDeckText(raw){
+ const d=JSON.parse(raw);
+ if(!d||!Array.isArray(d.slides)||!d.slides.length)throw new Error('Invalid deck');
+ push();S=d;cur=0;sel=null;$('#ttl').value=S.title||'';
+ renderAll();save();$('#io').close();
+}
+$('#idown').onclick=downloadDeck;
+$('#iimport').onclick=()=>$('#deckfile').click();
+$('#deckfile').onchange=ev=>{
+ const f=ev.target.files[0];ev.target.value='';if(!f)return;
+ const r=new FileReader();
+ r.onload=()=>{
+  try{loadDeckText(String(r.result||''));toast('Slide deck imported successfully.')}
+  catch(e){alert('That file is not a valid Slidecraft .scdeck file.')}
+ };
+ r.onerror=()=>alert('Could not read that file.');
+ r.readAsText(f);
+};
 $('#icl').onclick=()=>$('#io').close();
 $('#icp').onclick=()=>{const t=$('#iot');t.select();try{navigator.clipboard.writeText(t.value)}catch(e){document.execCommand('copy')}};
-$('#ild').onclick=()=>{try{const d=JSON.parse($('#iot').value);if(!d.slides||!d.slides.length)throw 0;push();S=d;cur=0;sel=null;$('#ttl').value=S.title||'';renderAll();save();$('#io').close()}catch(e){alert('That text is not a valid deck.')}};
+$('#ild').onclick=()=>{try{loadDeckText($('#iot').value)}catch(e){alert('That text is not a valid deck.')}};
 
 // presenting
 let P=null;
